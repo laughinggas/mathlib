@@ -64,7 +64,17 @@ quot.hrec_on₂ qa qb f
 /-- Map a function `f : α → β` that sends equivalent elements to equivalent elements
 to a function `quotient sa → quotient sb`. Useful to define unary operations on quotients. -/
 protected def map (f : α → β) (h : ((≈) ⇒ (≈)) f f) : quotient sa → quotient sb :=
-quot.map f @h
+quot.map f h
+
+@[simp] lemma map_mk (f : α → β) (h : ((≈) ⇒ (≈)) f f) (x : α) :
+  quotient.map f h (⟦x⟧ : quotient sa) = (⟦f x⟧ : quotient sb) :=
+rfl
+
+/-- Map a function `f : α → β` that sends equivalent elements to equivalent elements
+to a function `quotient sa → quotient sb`. Useful to define unary operations on quotients. -/
+protected def map' {α β : Sort*} {sa : setoid α} {sb : setoid β} (f : α → β) (h : ((≈) ⇒ (≈)) f f) :
+  quotient sa → quotient sb :=
+quot.map f h
 
 variables {γ : Sort*} [sc : setoid γ]
 
