@@ -27,7 +27,7 @@ local notation `⟦`:max a `⟧` := quot.mk _ a
 
 instance [inhabited α] : inhabited (quot ra) := ⟨⟦default _⟧⟩
 
-protected def hrec_on₂ (qa : quot ra) (qb : quot rb) (f : ∀ a b, φ ⟦a⟧ ⟦b⟧)
+protected def hrec_on₂ (qa : quot ra) (qb : quot rb) (f : Π a b, φ ⟦a⟧ ⟦b⟧)
   (ca : ∀ {b a₁ a₂}, ra a₁ a₂ → f a₁ b == f a₂ b)
   (cb : ∀ {a b₁ b₂}, rb b₁ b₂ → f a b₁ == f a b₂) : φ qa qb :=
 quot.hrec_on qa (λ a, quot.hrec_on qb (f a) (λ b₁ b₂ pb, cb pb)) $ λ a₁ a₂ pa,
@@ -55,7 +55,8 @@ variables {φ : quotient sa → quotient sb → Sort*}
 
 instance [inhabited α] : inhabited (quotient sa) := ⟨⟦default _⟧⟩
 
-protected def hrec_on₂ (qa : quotient sa) (qb : quotient sb) (f : ∀ a b, φ ⟦a⟧ ⟦b⟧)
+/-- Induction on two `quotient` arguments `a` and `b`, result type depends on `⟦a⟧` and `⟦b⟧`. -/
+protected def hrec_on₂ (qa : quotient sa) (qb : quotient sb) (f : Π a b, φ ⟦a⟧ ⟦b⟧)
   (c : ∀ a₁ b₁ a₂ b₂, a₁ ≈ a₂ → b₁ ≈ b₂ → f a₁ b₁ == f a₂ b₂) : φ qa qb :=
 quot.hrec_on₂ qa qb f
   (λ _ _ _ p, c _ _ _ _ p (setoid.refl _))
@@ -70,12 +71,6 @@ quot.map f h
   quotient.map f h (⟦x⟧ : quotient sa) = (⟦f x⟧ : quotient sb) :=
 rfl
 
-/-- Map a function `f : α → β` that sends equivalent elements to equivalent elements
-to a function `quotient sa → quotient sb`. Useful to define unary operations on quotients. -/
-protected def map' {α β : Sort*} {sa : setoid α} {sb : setoid β} (f : α → β) (h : ((≈) ⇒ (≈)) f f) :
-  quotient sa → quotient sb :=
-quot.map f h
-
 variables {γ : Sort*} [sc : setoid γ]
 
 /-- Map a function `f : α → β → γ` that sends equivalent elements to equivalent elements
@@ -84,13 +79,6 @@ Useful to define binary operations on quotients. -/
 protected def map₂ (f : α → β → γ) (h : ((≈) ⇒ (≈) ⇒ (≈)) f f) :
   quotient sa → quotient sb → quotient sc :=
 quotient.lift₂ (λ x y, ⟦f x y⟧) (λ x₁ y₁ x₂ y₂ h₁ h₂, quot.sound $ h h₁ h₂)
-
-/-- A version of `quotient.map₂` using curly braces and unification. -/
-protected def map₂' {α : Sort*} {β : Sort*} {γ : Sort*}
-  {sa : setoid α} {sb : setoid β} {sc : setoid γ}
-  (f : α → β → γ) (h : ((≈) ⇒ (≈) ⇒ (≈)) f f) :
-  quotient sa → quotient sb → quotient sc :=
-quotient.map₂ f h
 
 end quotient
 
@@ -279,6 +267,30 @@ protected lemma induction_on₃' {p : quotient s₁ → quotient s₂ → quotie
   (q₁ : quotient s₁) (q₂ : quotient s₂) (q₃ : quotient s₃)
   (h : ∀ a₁ a₂ a₃, p (quotient.mk' a₁) (quotient.mk' a₂) (quotient.mk' a₃)) : p q₁ q₂ q₃ :=
 quotient.induction_on₃ q₁ q₂ q₃ h
+
+/-- Recursion on a `quotient` argument `a`, result type depends on `⟦a⟧`. -/
+protected def hrec_on' {φ : quotient s₁ → Sort*} (qa : quotient s₁) (f : Π a, φ (quotient.mk' a))
+  (c : ∀ a₁ a₂, a₁ ≈ a₂ → f a₁ == f a₂) : φ qa :=
+quot.hrec_on qa f c
+
+/-- Recursion on two `quotient` arguments `a` and `b`, result type depends on `⟦a⟧` and `⟦b⟧`. -/
+protected def hrec_on₂' {φ : quotient s₁ → quotient s₂ → Sort*} (qa : quotient s₁)
+  (qb : quotient s₂) (f : ∀ a b, φ (quotient.mk' a) (quotient.mk' b))
+  (c : ∀ a₁ b₁ a₂ b₂, a₁ ≈ a₂ → b₁ ≈ b₂ → f a₁ b₁ == f a₂ b₂) : φ qa qb :=
+quot.hrec_on₂ qa qb f
+  (λ _ _ _ p, c _ _ _ _ p (setoid.refl _))
+  (λ _ _ _ p, c _ _ _ _ (setoid.refl _) p)
+
+/-- Map a function `f : α → β` that sends equivalent elements to equivalent elements
+to a function `quotient sa → quotient sb`. Useful to define unary operations on quotients. -/
+protected def map' (f : α → β) (h : ((≈) ⇒ (≈)) f f) :
+  quotient s₁ → quotient s₂ :=
+quot.map f h
+
+/-- A version of `quotient.map₂` using curly braces and unification. -/
+protected def map₂' (f : α → β → γ) (h : ((≈) ⇒ (≈) ⇒ (≈)) f f) :
+  quotient s₁ → quotient s₂ → quotient s₃ :=
+quotient.map₂ f h
 
 lemma exact' {a b : α} :
   (quotient.mk' a : quotient s₁) = quotient.mk' b → @setoid.r _ s₁ a b :=

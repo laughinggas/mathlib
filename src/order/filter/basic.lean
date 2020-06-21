@@ -782,6 +782,10 @@ protected lemma ext' {f₁ f₂ : filter α}
   f₁ = f₂ :=
 filter.ext h
 
+lemma eventually_of_le {f₁ f₂ : filter α} (h : f₁ ≤ f₂) {p : α → Prop} (hp : ∀ᶠ x in f₂, p x) :
+  ∀ᶠ x in f₁, p x :=
+h hp
+
 lemma eventually_of_mem {f : filter α} {P : α → Prop} {U : set α} (hU : U ∈ f) (h : ∀ x ∈ U, P x) :
   ∀ᶠ x in f, P x :=
 mem_sets_of_superset hU h
@@ -1721,7 +1725,7 @@ hf h
 lemma eventually_eq_of_left_inv_of_right_inv {f : α → β} {g₁ g₂ : β → α} {fa : filter α}
   {fb : filter β} (hleft : ∀ᶠ x in fa, g₁ (f x) = x) (hright : ∀ᶠ y in fb, f (g₂ y) = y)
   (htendsto : tendsto g₂ fb fa) :
-  ∀ᶠ y in fb, g₁ y = g₂ y :=
+  g₁ =ᶠ[fb] g₂ :=
 (htendsto.eventually hleft).mp $ hright.mono $ λ y hr hl, (congr_arg g₁ hr.symm).trans hl
 
 lemma tendsto_iff_comap {f : α → β} {l₁ : filter α} {l₂ : filter β} :

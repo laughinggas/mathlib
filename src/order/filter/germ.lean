@@ -15,11 +15,18 @@ with respect to the equivalence relation `eventually_eq l`: `f ≈ g` means `∀
 We define `mk l f` to be the germ of `f` at `l` and `const l c` to be the germ of the constant
 function at `l`.
 
-For each of the following structures we prove that if `β` has this structure, then so does `germ l β`:
+For each of the following structures we prove that if `β` has this structure, then so does
+`germ l β`:
 
 * one-operation algebraic structures up to `comm_group`;
 * `mul_zero_class`, `distrib`, `semiring`, `comm_semiring`, `ring`, `comm_ring`;
-* `preorder` and `partial_order`; note that `mk l f
+* `mul_action`, `distrib_mul_action`, `semimodule`;
+* `preorder`, `partial_order`, and `lattice` structures up to `bounded_lattice`;
+* `ordered_cancel_comm_monoid` and `ordered_cancel_add_comm_monoid`.
+
+## Tags
+
+filter, germ
 -/
 
 namespace filter
@@ -41,6 +48,7 @@ section has_le
 
 variables [has_le β]
 
+/-- A function `f` is eventually less than or equal to a function `g` at a filter `l`. -/
 def eventually_le (l : filter α) (f g : α → β) : Prop := ∀ᶠ x in l, f x ≤ g x
 
 notation f ` ≤ᶠ[`:50 l:50 `] `:0 g:50 := eventually_le l f g
@@ -80,15 +88,19 @@ lemma eventually_le.antisymm [partial_order β] (h₁ : f ≤ᶠ[l] g) (h₂ : g
   f =ᶠ[l] g :=
 h₂.mp $ h₁.mono $ λ x, le_antisymm
 
+/-- Setoid used to define the space of germs. -/
 def germ_setoid (l : filter α) (β : Type*) : setoid (α → β) :=
 { r := eventually_eq l,
   iseqv := ⟨eventually_eq.refl _, λ _ _, eventually_eq.symm, λ _ _ _, eventually_eq.trans⟩ }
 
+/-- The space of germs of functions `α → β` at a filter `l`. -/
 def germ (l : filter α) (β : Type*) : Type* := quotient (germ_setoid l β)
 
 namespace germ
 
 instance : has_coe_t (α → β) (germ l β) := ⟨quotient.mk'⟩
+
+instance : has_lift_t β (germ l β) := ⟨λ c, ↑(λ (x : α), c)⟩
 
 @[simp] lemma quot_mk_eq_coe (l : filter α) (f : α → β) : quot.mk _ f = (f : germ l β) := rfl
 
@@ -110,42 +122,130 @@ lemma induction_on₃ (f : germ l β) (g : germ l γ) (h : germ l δ)
   p f g h :=
 quotient.induction_on₃' f g h H
 
-lemma coe_eq : (f : germ l β) = g ↔ (f =ᶠ[l] g) := quotient.eq'
+/-- Given a map `F : (α → β) → (γ → δ)` that sends functions eventually equal at `l` to functions
+eventually equal at `lc`, returns a map from `germ l β` to `germ lc δ`. -/
+def map' {lc : filter γ} (F : (α → β) → (γ → δ)) (hF : (l.eventually_eq ⇒ lc.eventually_eq) F F) :
+  germ l β → germ lc δ :=
+quotient.map' F hF
+
+/-- A version of `quotient.lift_on'` using coercion instead of `quotient.mk'`. -/
+def lift_on {γ : Sort*} (f : germ l β) (F : (α → β) → γ) (hF : (l.eventually_eq ⇒ (=)) F F) : γ :=
+quotient.lift_on' f F hF
+
+@[simp] lemma map'_coe {lc : filter γ} (F : (α → β) → (γ → δ))
+  (hF : (l.eventually_eq ⇒ lc.eventually_eq) F F) (f : α → β) :
+  map' F hF f = F f :=
+rfl
+
+@[simp, norm_cast] lemma coe_eq : (f : germ l β) = g ↔ (f =ᶠ[l] g) := quotient.eq'
 
 alias coe_eq ↔ _ filter.eventually_eq.germ_eq
 
+/-- Lift a function `β → γ` to a function `germ l β → germ l γ`. -/
 def map (op : β → γ) : germ l β → germ l γ :=
-quotient.map' ((∘) op) $ λ f g H, H.mono $ λ x H, congr_arg op H
+map' ((∘) op) $ λ f g H, H.mono $ λ x H, congr_arg op H
 
+@[simp] lemma map_coe (op : β → γ) (f : α → β) : map op (f : germ l β) = op ∘ f := rfl
+
+@[simp] lemma map_id : map id = (id : germ l β → germ l β) := by { ext ⟨f⟩, refl }
+
+lemma map_map (op₁ : γ → δ) (op₂ : β → γ) (f : germ l β) :
+  map op₁ (map op₂ f) = map (op₁ ∘ op₂) f :=
+induction_on f $ λ f, rfl
+
+/-- Lift a binary function `β → γ → δ` to a function `germ l β → germ l γ → germ l δ`. -/
 def map₂ (op : β → γ → δ) : germ l β → germ l γ → germ l δ :=
 quotient.map₂' (λ f g x, op (f x) (g x)) $ λ f f' Hf g g' Hg,
 Hg.mp $ Hf.mono $ λ x Hf Hg, by simp only [Hf, Hg]
 
-def comp_tendsto (f : germ l β) {lc : filter γ} {g : γ → α} (hg : tendsto g lc l) :
-  germ lc β :=
-quotient.lift_on' f (λ f, ↑(f ∘ g)) $ λ f g H, coe_eq.2 $ H.comp_tendsto hg
+/-- Lift of `tendsto` to the space of germs. -/
+protected def tendsto (f : germ l β) (lb : filter β) : Prop :=
+lift_on f (λ f, tendsto f l lb) $ λ f g H, propext (tendsto_congr' H)
 
-@[simp] lemma coe_comp_tendsto (f : α → β) {lc : filter γ} {g : γ → α} (hg : tendsto g lc l) :
-  (f : germ l β).comp_tendsto hg = f ∘ g :=
+@[simp, norm_cast] lemma coe_tendsto {f : α → β} {lb : filter β} :
+  (f : germ l β).tendsto lb ↔ tendsto f l lb :=
+iff.rfl
+
+alias coe_tendsto ↔ _ filter.tendsto.germ_tendsto
+
+/-- Composition of a germ and a `filter.germ.tendsto`. -/
+def comp_tendsto' (f : germ l β) {lc : filter γ} (g : germ lc α) (hg : g.tendsto l) :
+  germ lc β :=
+lift_on f (λ f, g.map f) $ λ f₁ f₂ hF, (induction_on g $ λ g hg, coe_eq.2 $ hg.eventually hF) hg
+
+@[simp] lemma coe_comp_tendsto' (f : α → β) {lc : filter γ} {g : germ lc α} (hg : g.tendsto l) :
+  (f : germ l β).comp_tendsto' g hg = g.map f :=
 rfl
 
-def const (l : filter α) (a : β) : germ l β := ↑(λ x : α, a)
+/-- Composition of a germ and a `filter.tendsto`. -/
+def comp_tendsto (f : germ l β) {lc : filter γ} (g : γ → α) (hg : tendsto g lc l) :
+  germ lc β :=
+f.comp_tendsto' _ hg.germ_tendsto
 
-@[simp] lemma const_inj (hl : l ≠ ⊥) {a b : β} : const l a = const l b ↔ a = b :=
+@[simp] lemma coe_comp_tendsto (f : α → β) {lc : filter γ} {g : γ → α} (hg : tendsto g lc l) :
+  (f : germ l β).comp_tendsto g hg = f ∘ g :=
+rfl
+
+@[simp] lemma comp_tendsto'_coe (f : germ l β) {lc : filter γ} {g : γ → α} (hg : tendsto g lc l) :
+  f.comp_tendsto' _ hg.germ_tendsto = f.comp_tendsto g hg :=
+rfl
+
+@[simp, norm_cast] lemma const_inj (hl : l ≠ ⊥) {a b : β} : (↑a : germ l β) = ↑b ↔ a = b :=
 coe_eq.trans $ const_eventually_eq hl
 
 @[simp] lemma map_const (l : filter α) (a : β) (f : β → γ) :
-  (const l a).map f = const l (f a) :=
+  (↑a : germ l β).map f = ↑(f a) :=
 rfl
 
 @[simp] lemma map₂_const (l : filter α) (b : β) (c : γ) (f : β → γ → δ) :
-  map₂ f (const l b) (const l c) = const l (f b c) :=
+  map₂ f (↑b : germ l β) ↑c = ↑(f b c) :=
 rfl
 
 @[simp] lemma const_comp_tendsto {l : filter α} (b : β) {lc : filter γ} {g : γ → α}
   (hg : tendsto g lc l) :
-  (const l b).comp_tendsto hg = const lc b :=
+  (↑b : germ l β).comp_tendsto g hg = ↑b :=
 rfl
+
+@[simp] lemma const_comp_tendsto' {l : filter α} (b : β) {lc : filter γ} {g : germ lc α}
+  (hg : g.tendsto l) :
+  (↑b : germ l β).comp_tendsto' g hg = ↑b :=
+induction_on g (λ _ _, rfl) hg
+
+/-- Lift a predicate on `β` to `germ l β`. -/
+def lift_pred (p : β → Prop) (f : germ l β) : Prop :=
+lift_on f (λ f, ∀ᶠ x in l, p (f x)) $
+λ f g H, propext $ eventually_congr $ H.mono $ λ x hx, hx ▸ iff.rfl
+
+@[simp] lemma lift_pred_coe {p : β → Prop} {f : α → β} :
+  lift_pred p (f : germ l β) ↔ ∀ᶠ x in l, p (f x) :=
+iff.rfl
+
+lemma lift_pred_const {p : β → Prop} {x : β} (hx : p x) :
+  lift_pred p (↑x : germ l β) :=
+eventually_of_forall _ $ λ y, hx
+
+@[simp] lemma lift_pred_const_iff (hl : l ≠ ⊥) {p : β → Prop} {x : β} :
+  lift_pred p (↑x : germ l β) ↔ p x :=
+@eventually_const _ _ hl (p x)
+
+/-- Lift a relation `r : β → γ → Prop` to `germ l β → germ l γ → Prop`. -/
+def lift_rel (r : β → γ → Prop) (f : germ l β) (g : germ l γ) : Prop :=
+quotient.lift_on₂' f g (λ f g, ∀ᶠ x in l, r (f x) (g x)) $
+λ f g f' g' Hf Hg, propext $ eventually_congr $ Hg.mp $ Hf.mono $ λ x hf hg, hf ▸ hg ▸ iff.rfl
+
+@[simp] lemma lift_rel_coe {r : β → γ → Prop} {f : α → β} {g : α → γ} :
+  lift_rel r (f : germ l β) g ↔ ∀ᶠ x in l, r (f x) (g x) :=
+iff.rfl
+
+lemma lift_rel_const {r : β → γ → Prop} {x : β} {y : γ} (h : r x y) :
+  lift_rel r (↑x : germ l β) ↑y :=
+eventually_of_forall _ $ λ _, h
+
+@[simp] lemma lift_rel_const_iff (hl : l ≠ ⊥) {r : β → γ → Prop} {x : β} {y : γ} :
+  lift_rel r (↑x : germ l β) ↑y ↔ r x y :=
+@eventually_const _ _ hl (r x y)
+
+instance [inhabited β] : inhabited (germ l β) := ⟨↑(default β)⟩
 
 section monoid
 
@@ -160,7 +260,7 @@ lemma coe_mul [has_mul M] (f g : α → M) : ↑(f * g) = (f * g : germ l M) := 
 attribute [norm_cast] coe_mul coe_add
 
 @[to_additive]
-instance [has_one M] : has_one (germ l M) := ⟨const l 1⟩
+instance [has_one M] : has_one (germ l M) := ⟨↑(1:M)⟩
 
 @[simp, to_additive]
 lemma coe_one [has_one M] : ↑(1 : α → M) = (1 : germ l M) := rfl
@@ -178,14 +278,14 @@ instance [comm_semigroup M] : comm_semigroup (germ l M) :=
   mul_comm := by { rintros ⟨f⟩ ⟨g⟩, simp only [mul_comm, quot_mk_eq_coe, ← coe_mul] },
   .. germ.semigroup }
 
-@[to_additive left_cancel_add_semigroup]
+@[to_additive add_left_cancel_semigroup]
 instance [left_cancel_semigroup M] : left_cancel_semigroup (germ l M) :=
 { mul := (*),
   mul_left_cancel := λ f₁ f₂ f₃, induction_on₃ f₁ f₂ f₃ $ λ f₁ f₂ f₃ H,
     coe_eq.2 ((coe_eq.1 H).mono $ λ x, mul_left_cancel),
   .. germ.semigroup }
 
-@[to_additive right_cancel_add_semigroup]
+@[to_additive add_right_cancel_semigroup]
 instance [right_cancel_semigroup M] : right_cancel_semigroup (germ l M) :=
 { mul := (*),
   mul_right_cancel := λ f₁ f₂ f₃, induction_on₃ f₁ f₂ f₃ $ λ f₁ f₂ f₃ H,
@@ -226,9 +326,7 @@ instance [group G] : group (germ l G) :=
 { mul := (*),
   one := 1,
   inv := has_inv.inv,
-  mul_left_inv := λ f, induction_on f $ λ f,
-    -- TODO(pi_id): `pi.group.to_has_one` has `id` preventing `simp` from using `mk_one`
-    by { norm_cast, rw [mul_left_inv], refl },
+  mul_left_inv := λ f, induction_on f $ λ f, by { norm_cast, rw [mul_left_inv] },
   .. germ.monoid }
 
 @[simp, norm_cast]
@@ -247,16 +345,17 @@ section ring
 
 variables {R : Type*}
 
-/-- If `0 ≠ 1` in the codomain and -/
-protected def nonzero [has_zero R] [has_one R] [nonzero R] (hl : l ≠ ⊥) :
+/-- If `0 ≠ 1` in `β` and `l` is a non-trivial filter (`l ≠ ⊥`), then `0 ≠ 1` in `germ l β`.
+This cannot be an `instance` because it depends on `l ≠ ⊥`. -/
+protected lemma nonzero [has_zero R] [has_one R] [nonzero R] (hl : l ≠ ⊥) :
   nonzero (germ l R) :=
 { zero_ne_one := mt (const_inj hl).1 zero_ne_one }
 
 instance [mul_zero_class R] : mul_zero_class (germ l R) :=
 { zero := 0,
   mul := (*),
-  mul_zero := λ f, induction_on f $ λ f, by { norm_cast, rw [mul_zero], refl },
-  zero_mul := λ f, induction_on f $ λ f, by { norm_cast, rw [zero_mul], refl } }
+  mul_zero := λ f, induction_on f $ λ f, by { norm_cast, rw [mul_zero] },
+  zero_mul := λ f, induction_on f $ λ f, by { norm_cast, rw [zero_mul] } }
 
 instance [distrib R] : distrib (germ l R) :=
 { mul := (*),
@@ -282,29 +381,47 @@ section module
 
 variables {M N R : Type*}
 
-instance [monoid M] [has_scalar M β]  : has_scalar M (germ l β) :=
+instance [has_scalar M β]  : has_scalar M (germ l β) :=
 ⟨λ c, map ((•) c)⟩
 
-instance has_scalar' [monoid M] [has_scalar M β] : has_scalar (germ l M) (germ l β) :=
+instance has_scalar' [has_scalar M β] : has_scalar (germ l M) (germ l β) :=
 ⟨map₂ (•)⟩
 
-@[simp] lemma coe_smul [monoid M] [has_scalar M β] (c : M) (f : α → β) :
+@[simp, norm_cast] lemma coe_smul [has_scalar M β] (c : M) (f : α → β) :
   ↑(c • f) = (c • f : germ l β) :=
 rfl
 
-@[simp] lemma coe_smul' [monoid M] [has_scalar M β] (c : α → M) (f : α → β) :
-  ↑(c • f) = (c • f : germ l β) :=
+@[simp, norm_cast] lemma coe_smul' [has_scalar M β] (c : α → M) (f : α → β) :
+  ↑(c • f) = (c : germ l M) • (f : germ l β) :=
 rfl
 
-instance {M : Type*} [monoid M] [mul_action M β]  : mul_action M (germ l β) :=
-{ smul := (•),
-  one_smul := λ f, induction_on f $ λ f, _,
-}
+instance [monoid M] [mul_action M β]  : mul_action M (germ l β) :=
+{ one_smul := λ f, induction_on f $ λ f, by { norm_cast, simp only [one_smul] },
+  mul_smul := λ c₁ c₂ f, induction_on f $ λ f, by { norm_cast, simp only [mul_smul] } }
 
-instance {M N : Type*} [monoid M] [add_monoid N] [distrib_mul_action M N] :
+instance mul_action' [monoid M] [mul_action M β]  : mul_action (germ l M) (germ l β) :=
+{ one_smul := λ f, induction_on f $ λ f, by simp only [← coe_one, ← coe_smul', one_smul],
+  mul_smul := λ c₁ c₂ f, induction_on₃ c₁ c₂ f $ λ c₁ c₂ f, by { norm_cast, simp only [mul_smul] } }
+
+instance [monoid M] [add_monoid N] [distrib_mul_action M N] :
   distrib_mul_action M (germ l N) :=
-{ smul := (•),
-}
+{ smul_add := λ c f g, induction_on₂ f g $ λ f g, by { norm_cast, simp only [smul_add] },
+  smul_zero := λ c, by simp only [← coe_zero, ← coe_smul, smul_zero] }
+
+instance distrib_mul_action' [monoid M] [add_monoid N] [distrib_mul_action M N] :
+  distrib_mul_action (germ l M) (germ l N) :=
+{ smul_add := λ c f g, induction_on₃ c f g $ λ c f g, by { norm_cast, simp only [smul_add] },
+  smul_zero := λ c, induction_on c $ λ c, by simp only [← coe_zero, ← coe_smul', smul_zero] }
+
+instance [semiring R] [add_comm_monoid M] [semimodule R M] :
+  semimodule R (germ l M) :=
+{ add_smul := λ c₁ c₂ f, induction_on f $ λ f, by { norm_cast, simp only [add_smul] },
+  zero_smul := λ f, induction_on f $ λ f, by { norm_cast, simp only [zero_smul, coe_zero] } }
+
+instance semimodule' [semiring R] [add_comm_monoid M] [semimodule R M] :
+  semimodule (germ l R) (germ l M) :=
+{ add_smul := λ c₁ c₂ f, induction_on₃ c₁ c₂ f $ λ c₁ c₂ f, by { norm_cast, simp only [add_smul] },
+  zero_smul := λ f, induction_on f $ λ f, by simp only [← coe_zero, ← coe_smul', zero_smul] }
 
 end module
 
@@ -312,8 +429,14 @@ instance [has_le β] : has_le (germ l β) :=
 ⟨λ f g, quotient.lift_on₂' f g l.eventually_le $
   λ f f' g g' h h', propext $ eventually_le_congr h h'⟩
 
--- Should this be a `norm_cast`?
-@[simp] lemma coe_le [has_le β] : (f : germ l β) ≤ g = (f ≤ᶠ[l] g) := rfl
+@[simp] lemma coe_le [has_le β] : (f : germ l β) ≤ g ↔ (f ≤ᶠ[l] g) := iff.rfl
+
+lemma const_le [has_le β] {x y : β} (h : x ≤ y) : (↑x : germ l β) ≤ ↑y :=
+lift_rel_const h
+
+@[simp, norm_cast]
+lemma const_le_iff [has_le β] (hl : l ≠ ⊥) {x y : β} : (↑x : germ l β) ≤ ↑y ↔ x ≤ y :=
+lift_rel_const_iff hl
 
 instance [preorder β] : preorder (germ l β) :=
 { le := (≤),
@@ -325,9 +448,9 @@ instance [partial_order β] : partial_order (germ l β) :=
   le_antisymm := λ f g, induction_on₂ f g $ λ f g h₁ h₂, (h₁.antisymm h₂).germ_eq,
   .. germ.preorder }
 
-instance [has_bot β] : has_bot (germ l β) := ⟨const l ⊥⟩
+instance [has_bot β] : has_bot (germ l β) := ⟨↑(⊥:β)⟩
 
-@[simp] lemma const_bot [has_bot β] : const l (⊥:β) = ⊥ := rfl
+@[simp, norm_cast] lemma const_bot [has_bot β] : (↑(⊥:β) : germ l β) = ⊥ := rfl
 
 instance [order_bot β] : order_bot (germ l β) :=
 { bot := ⊥,
@@ -335,9 +458,9 @@ instance [order_bot β] : order_bot (germ l β) :=
   bot_le := λ f, induction_on f $ λ f, eventually_of_forall _ $ λ x, bot_le,
   .. germ.partial_order }
 
-instance [has_top β] : has_top (germ l β) := ⟨const l ⊤⟩
+instance [has_top β] : has_top (germ l β) := ⟨↑(⊤:β)⟩
 
-@[simp] lemma const_top [has_top β] : const l (⊤:β) = ⊤ := rfl
+@[simp, norm_cast] lemma const_top [has_top β] : (↑(⊤:β) : germ l β) = ⊤ := rfl
 
 instance [order_top β] : order_top (germ l β) :=
 { top := ⊤,
@@ -347,7 +470,11 @@ instance [order_top β] : order_top (germ l β) :=
 
 instance [has_sup β] : has_sup (germ l β) := ⟨map₂ (⊔)⟩
 
+@[simp, norm_cast] lemma const_sup [has_sup β] (a b : β) : ↑(a ⊔ b) = (↑a ⊔ ↑b : germ l β) := rfl
+
 instance [has_inf β] : has_inf (germ l β) := ⟨map₂ (⊓)⟩
+
+@[simp, norm_cast] lemma const_inf [has_inf β] (a b : β) : ↑(a ⊓ b) = (↑a ⊓ ↑b : germ l β) := rfl
 
 instance [semilattice_sup β] : semilattice_sup (germ l β) :=
 { sup := (⊔),
@@ -395,6 +522,12 @@ instance [ordered_cancel_comm_monoid β] : ordered_cancel_comm_monoid (germ l β
     H.mono $ λ x, le_of_mul_le_mul_left',
   .. germ.partial_order, .. germ.comm_monoid, .. germ.left_cancel_semigroup,
   .. germ.right_cancel_semigroup }
+
+@[to_additive ordered_add_comm_group]
+instance ordered_comm_group [ordered_comm_group β] : ordered_comm_group (germ l β) :=
+{ mul_le_mul_left := λ f g, induction_on₂ f g $ λ f g H h, induction_on h $ λ h,
+    H.mono $ λ x H, mul_le_mul_left'' H _,
+  .. germ.partial_order, .. germ.comm_group }
 
 end germ
 
