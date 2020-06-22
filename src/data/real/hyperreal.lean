@@ -25,6 +25,8 @@ private def U : is_ultrafilter (@hyperfilter ℕ) := is_ultrafilter_hyperfilter
 noncomputable instance : discrete_linear_ordered_field ℝ* :=
 germ.discrete_linear_ordered_field U
 
+noncomputable instance : inhabited ℝ* := ⟨0⟩
+
 noncomputable instance : has_coe_t ℝ ℝ* := ⟨λ x, (↑x : germ _ _)⟩
 
 @[simp, norm_cast]
